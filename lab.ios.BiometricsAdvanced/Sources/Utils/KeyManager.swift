@@ -41,6 +41,21 @@ private extension KeyManager {
     func createKey() throws {
         deleteKey()
 
+        // Generates a symetric ramdom key
+        let randomKey = SymmetricKey(size: .bits256)
+        let randomKeyData = randomKey.withUnsafeBytes { Data(Array($0)) }
+
+        var query: [CFString: Any] = [kSecClass: kSecClassGenericPassword,
+                                  kSecValueData: randomKeyData,
+                                kSecAttrService: Self.service]
+
+#if targetEnvironment(simulator)
+        // NOTE: As on some simulators (https://developer.apple.com/forums/thread/685773) kSecAttrAccessControl returns an error,
+        // there is a simplified setup to make it work.
+        query[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+#else
+
         guard let accessControl = SecAccessControlCreateWithFlags(kCFAllocatorDefault,
                                                                   kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
                                                                   .userPresence,
@@ -49,14 +64,9 @@ private extension KeyManager {
             throw KeyManagerError.generateKey(nil)
         }
 
-        // Generates a symetric ramdom key
-        let randomKey = SymmetricKey(size: .bits256)
-        let randomKeyData = randomKey.withUnsafeBytes { Data(Array($0)) }
+        query[kSecAttrAccessControl] = accessControl
 
-        let query: [CFString: Any] = [kSecClass: kSecClassGenericPassword,
-                                  kSecValueData: randomKeyData,
-                          kSecAttrAccessControl: accessControl,
-                                kSecAttrService: Self.service]
+#endif
 
         let status = SecItemAdd(query as CFDictionary, nil)
 
